@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>SA-MP / open.mp HUD</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;700&display=swap');
+
+  :root{
+    --bg-panel: rgba(18, 20, 24, 0.55);
+    --bg-panel-strong: rgba(14, 16, 20, 0.72);
+    --border-soft: rgba(255,255,255,0.08);
+    --text-main: #f2f3f5;
+    --text-dim: #8b93a1;
+    --accent: #38f0c4;          /* cyber teal/green */
+    --accent-blue: #4d8dff;     /* secondary accent */
+    --danger: #ff4d5e;
+    --armor-color: #4d8dff;
+    --radius: 14px;
+  }
+
+  *{ box-sizing: border-box; }
+
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    background: radial-gradient(circle at 30% 30%, #1b2028 0%, #0a0c10 70%);
+    font-family:'Inter', sans-serif;
+    color: var(--text-main);
+    overflow:hidden;
+    user-select:none;
+  }
+
+  #hud{
+    position:relative;
+    width:100%; height:100%;
+  }
+
+  /* ---------- shared panel look ---------- */
+  .panel{
+    background: var(--bg-panel);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+
+  /* ================= BOTTOM LEFT : HP / ARMOR ================= */
+  #vitals{
+    position:absolute;
+    left: 28px;
+    bottom: 28px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    width: 300px;
+    padding: 16px 18px;
+  }
+
+  .stat-row{
+    display:flex;
+    align-items:center;
+    gap: 12px;
+  }
+
+  .stat-icon{
+    width: 34px; height: 34px;
+    flex: 0 0 34px;
+    border-radius: 8px;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-soft);
+  }
+  .stat-icon svg{ width:18px; height:18px; }
+
+  .stat-main{ flex:1; min-width:0; }
+
+  .stat-labelrow{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin-bottom: 5px;
+  }
+
+  .stat-name{
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    font-weight:600;
+  }
+
+  .stat-value{
+    font-family:'Roboto Mono', monospace;
+    font-size: 14px;
+    font-weight:700;
+    color: var(--text-main);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .bar-track{
+    position:relative;
+    height: 8px;
+    border-radius: 5px;
+    background: rgba(255,255,255,0.06);
+    overflow:hidden;
+  }
+
+  .bar-fill{
+    position:absolute;
+    top:0; left:0; bottom:0;
+    width: 100%;
+    border-radius: 5px;
+    transition: width 0.35s cubic-bezier(.4,0,.2,1), background-color 0.35s ease;
+    background: linear-gradient(90deg, var(--accent), #6dffdb);
+  }
+  .bar-fill.armor{
+    background: linear-gradient(90deg, var(--armor-color), #86b3ff);
+  }
+  .bar-fill.low{
+    background: linear-gradient(90deg, var(--danger), #ff8a94);
+  }
+
+  .bar-fill::after{
+    content:"";
+    position:absolute; inset:0;
+    background: linear-gradient(90deg, rgba(255,255,255,0.25), transparent 40%);
+  }
+
+  /* ================= TOP LEFT : MONEY ================= */
+  #money{
+    position:absolute;
+    left: 28px;
+    top: 28px;
+    padding: 12px 20px;
+    display:flex;
+    align-items:center;
+    gap: 10px;
+  }
+
+  #money .cash-icon{
+    width: 26px; height:26px;
+    border-radius: 50%;
+    background: rgba(56,240,196,0.12);
+    border: 1px solid rgba(56,240,196,0.35);
+    display:flex; align-items:center; justify-content:center;
+    color: var(--accent);
+    font-weight:800;
+    font-size: 14px;
+    font-family:'Roboto Mono', monospace;
+  }
+
+  #money-value{
+    font-family:'Roboto Mono', monospace;
+    font-size: 20px;
+    font-weight:700;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+    transition: color 0.25s ease;
+  }
+
+  #money-value.flash-up{ color: var(--accent); }
+  #money-value.flash-down{ color: var(--danger); }
+
+  /* ================= BOTTOM RIGHT : WEAPON / AMMO ================= */
+  #weapon{
+    position:absolute;
+    right: 28px;
+    bottom: 28px;
+    padding: 14px 20px;
+    display:flex;
+    align-items:center;
+    gap: 16px;
+    min-width: 220px;
+  }
+
+  #weapon-icon-box{
+    width: 46px; height: 46px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-soft);
+    display:flex; align-items:center; justify-content:center;
+    flex: 0 0 46px;
+  }
+  #weapon-icon-box svg{ width: 26px; height:26px; color: var(--accent); }
+
+  #weapon-text{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    flex:1;
+    gap: 3px;
+  }
+
+  #weapon-name{
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    font-weight:600;
+  }
+
+  #ammo-row{
+    display:flex;
+    align-items:baseline;
+    gap: 4px;
+    font-family:'Roboto Mono', monospace;
+  }
+
+  #ammo-current{
+    font-size: 24px;
+    font-weight:800;
+    color: var(--text-main);
+    font-variant-numeric: tabular-nums;
+  }
+
+  #ammo-max{
+    font-size: 13px;
+    color: var(--text-dim);
+    font-weight:600;
+  }
+
+  #ammo-dots{
+    display:flex;
+    gap: 4px;
+    margin-top: 2px;
+  }
+  #ammo-dots span{
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.12);
+    transition: background 0.2s ease;
+  }
+  #ammo-dots span.filled{ background: var(--accent); }
+
+  /* low-hp pulse on whole vitals panel */
+  #vitals.critical{
+    animation: pulse-danger 1s ease-in-out infinite;
+  }
+  @keyframes pulse-danger{
+    0%,100%{ box-shadow: 0 8px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04), 0 0 0 rgba(255,77,94,0); }
+    50%{ box-shadow: 0 8px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04), 0 0 22px rgba(255,77,94,0.35); }
+  }
+
+  #test-badge{
+    position:absolute;
+    top: 28px;
+    right: 28px;
+    padding: 8px 14px;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    font-weight:600;
+  }
+  #test-badge b{ color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div id="hud">
+
+  <!-- HEALTH / ARMOR -->
+  <div id="vitals" class="panel">
+    <div class="stat-row">
+      <div class="stat-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#ff4d5e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6Z"/>
+        </svg>
+      </div>
+      <div class="stat-main">
+        <div class="stat-labelrow">
+          <span class="stat-name">Health</span>
+          <span class="stat-value" id="hp-value">100</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" id="hp-fill" style="width:100%"></div></div>
+      </div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#4d8dff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2 4 5v6c0 5 3.4 8.7 8 11 4.6-2.3 8-6 8-11V5l-8-3Z"/>
+        </svg>
+      </div>
+      <div class="stat-main">
+        <div class="stat-labelrow">
+          <span class="stat-name">Armor</span>
+          <span class="stat-value" id="armor-value">0</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill armor" id="armor-fill" style="width:0%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MONEY -->
+  <div id="money" class="panel">
+    <div class="cash-icon">$</div>
+    <div id="money-value">0</div>
+  </div>
+
+  <!-- WEAPON / AMMO -->
+  <div id="weapon" class="panel">
+    <div id="weapon-icon-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 12h13l3-3h4v6h-4l-3-3"/>
+        <path d="M6 12v4"/>
+        <path d="M10 12v4"/>
+      </svg>
+    </div>
+    <div id="weapon-text">
+      <div id="weapon-name">Unarmed</div>
+      <div id="ammo-row">
+        <span id="ammo-current">0</span>
+        <span id="ammo-max">/ 0</span>
+      </div>
+      <div id="ammo-dots"></div>
+    </div>
+  </div>
+
+  <div id="test-badge">Test mode: <b>ON</b></div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- DOM refs ----------
+  const hpFill      = document.getElementById('hp-fill');
+  const hpValue      = document.getElementById('hp-value');
+  const armorFill    = document.getElementById('armor-fill');
+  const armorValue   = document.getElementById('armor-value');
+  const moneyValueEl = document.getElementById('money-value');
+  const weaponNameEl = document.getElementById('weapon-name');
+  const ammoCurrentEl= document.getElementById('ammo-current');
+  const ammoMaxEl    = document.getElementById('ammo-max');
+  const ammoDotsEl   = document.getElementById('ammo-dots');
+  const vitalsPanel  = document.getElementById('vitals');
+  const weaponIcon   = document.getElementById('weapon-icon-box').querySelector('svg');
+
+  // ---------- internal state (for smooth number tween) ----------
+  const state = {
+    hp: 100,
+    armor: 0,
+    money: 0,
+    ammo: 0,
+    maxAmmo: 0
+  };
+
+  const displayed = { hp: 100, armor: 0, money: 0 };
+  let rafId = null;
+
+  function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
+  function lerp(a, b, t){ return a + (b - a) * t; }
+
+  // Smoothly animates displayed.hp / .armor / .money toward state.* every frame
+  function tick(){
+    let stillMoving = false;
+    const speed = 0.18; // easing factor per frame
+
+    ['hp','armor'].forEach(key=>{
+      const diff = state[key] - displayed[key];
+      if (Math.abs(diff) > 0.4){
+        displayed[key] = lerp(displayed[key], state[key], speed);
+        stillMoving = true;
+      } else {
+        displayed[key] = state[key];
+      }
+    });
+
+    // money ticks up/down like a counter, a bit faster
+    const moneyDiff = state.money - displayed.money;
+    if (Math.abs(moneyDiff) > 1){
+      displayed.money = lerp(displayed.money, state.money, 0.25);
+      stillMoving = true;
+    } else {
+      displayed.money = state.money;
+    }
+
+    render();
+
+    if (stillMoving){
+      rafId = requestAnimationFrame(tick);
+    } else {
+      rafId = null;
+    }
+  }
+
+  function ensureLoop(){
+    if (rafId === null) rafId = requestAnimationFrame(tick);
+  }
+
+  function render(){
+    // HP
+    const hpPct = clamp(displayed.hp, 0, 100);
+    hpFill.style.width = hpPct + '%';
+    hpValue.textContent = Math.round(displayed.hp);
+    hpFill.classList.toggle('low', hpPct <= 25);
+    vitalsPanel.classList.toggle('critical', hpPct <= 20 && hpPct > 0);
+
+    // Armor
+    const armorPct = clamp(displayed.armor, 0, 100);
+    armorFill.style.width = armorPct + '%';
+    armorValue.textContent = Math.round(displayed.armor);
+
+    // Money
+    moneyValueEl.textContent = '$' + Math.round(displayed.money).toLocaleString('en-US');
+  }
+
+  function renderAmmoDots(current, max){
+    ammoDotsEl.innerHTML = '';
+    const dotCount = Math.min(max, 12) || 0;
+    if (dotCount === 0) return;
+    const filledDots = Math.round((current / max) * dotCount);
+    for (let i = 0; i < dotCount; i++){
+      const dot = document.createElement('span');
+      if (i < filledDots) dot.classList.add('filled');
+      ammoDotsEl.appendChild(dot);
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // PUBLIC API — call these from CEF / your SA-MP / open.mp client
+  // ---------------------------------------------------------------
+
+  /**
+   * Full HUD update.
+   * @param {number} hp        0-100
+   * @param {number} armour    0-100
+   * @param {number} money     integer, can be negative in theory
+   * @param {number} ammo      current ammo in clip
+   * @param {number} maxAmmo   clip size
+   * @param {string} [weaponName] optional weapon label
+   */
+  window.updateHud = function(hp, armour, money, ammo, maxAmmo, weaponName){
+    state.hp     = clamp(Number(hp) || 0, 0, 100);
+    state.armor  = clamp(Number(armour) || 0, 0, 100);
+    state.money  = Number(money) || 0;
+    state.ammo   = Math.max(0, Number(ammo) || 0);
+    state.maxAmmo= Math.max(0, Number(maxAmmo) || 0);
+
+    ammoCurrentEl.textContent = state.ammo;
+    ammoMaxEl.textContent = '/ ' + state.maxAmmo;
+    renderAmmoDots(state.ammo, state.maxAmmo);
+
+    if (typeof weaponName === 'string' && weaponName.length){
+      weaponNameEl.textContent = weaponName;
+    }
+
+    ensureLoop();
+  };
+
+  /** Update HP only (0-100) */
+  window.setHealth = function(hp){
+    state.hp = clamp(Number(hp) || 0, 0, 100);
+    ensureLoop();
+  };
+
+  /** Update armor only (0-100) */
+  window.setArmor = function(armour){
+    state.armor = clamp(Number(armour) || 0, 0, 100);
+    ensureLoop();
+  };
+
+  /** Update money only */
+  window.setMoney = function(money){
+    const prev = state.money;
+    state.money = Number(money) || 0;
+    moneyValueEl.classList.remove('flash-up','flash-down');
+    void moneyValueEl.offsetWidth; // restart animation
+    moneyValueEl.classList.add(state.money >= prev ? 'flash-up' : 'flash-down');
+    ensureLoop();
+  };
+
+  /** Update weapon + ammo only */
+  window.setWeapon = function(weaponName, ammo, maxAmmo){
+    weaponNameEl.textContent = weaponName || 'Unarmed';
+    state.ammo = Math.max(0, Number(ammo) || 0);
+    state.maxAmmo = Math.max(0, Number(maxAmmo) || 0);
+    ammoCurrentEl.textContent = state.ammo;
+    ammoMaxEl.textContent = '/ ' + state.maxAmmo;
+    renderAmmoDots(state.ammo, state.maxAmmo);
+  };
+
+  // initial paint
+  render();
+  renderAmmoDots(0,0);
+
+  // ---------------------------------------------------------------
+  // CEF BRIDGE — receives events emitted from Pawn via CEF_EmitEvent()
+  // and forwards them to the existing window.* functions above.
+  // NOTE: this assumes ODIYD's CEF plugin, where JS listens for
+  // emitted events via cef.on(name, callback). If your CEF plugin
+  // exposes a different bridge object/API, adjust the listener
+  // registration below accordingly — the window.* functions
+  // themselves don't need to change.
+  // ---------------------------------------------------------------
+  if (typeof cef !== 'undefined' && typeof cef.on === 'function') {
+    cef.on('updateHud', function (hp, armour, money, ammo, maxAmmo, weaponName) {
+      window.updateHud(hp, armour, money, ammo, maxAmmo, weaponName);
+    });
+    cef.on('setHealth', function (hp) { window.setHealth(hp); });
+    cef.on('setArmor',  function (armour) { window.setArmor(armour); });
+    cef.on('setMoney',  function (money) { window.setMoney(money); });
+    cef.on('setWeapon', function (weaponName, ammo, maxAmmo) {
+      window.setWeapon(weaponName, ammo, maxAmmo);
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // TEST MODE — set to false (or delete this whole block) once the
+  // CEF bridge above is wired up and confirmed working in-game.
+  // ---------------------------------------------------------------
+  const TEST_MODE = false;
+
+  if (TEST_MODE){
+    const weapons = [
+      { name: 'Desert Eagle', max: 7 },
+      { name: 'MP5',          max: 30 },
+      { name: 'AK-47',        max: 30 },
+      { name: 'M4',           max: 30 },
+      { name: 'Sawn-off',     max: 2 },
+      { name: 'Sniper Rifle', max: 10 }
+    ];
+
+    let hp = 100, armor = 100, money = 5000;
+    let wIndex = 0;
+    let ammo = weapons[0].max;
+
+    window.updateHud(hp, armor, money, ammo, weapons[0].max, weapons[0].name);
+
+    // simulate taking damage / losing armor over time
+    setInterval(() => {
+      hp = clamp(hp - (Math.random() * 6), 0, 100);
+      if (hp <= 0){
+        hp = 100; armor = 100; // "respawn"
+      } else if (armor > 0){
+        armor = clamp(armor - (Math.random() * 4), 0, 100);
+      }
+      window.setHealth(hp);
+      window.setArmor(armor);
+    }, 1200);
+
+    // simulate firing weapon (ammo drain)
+    setInterval(() => {
+      ammo = Math.max(0, ammo - 1);
+      if (ammo === 0){
+        wIndex = (wIndex + 1) % weapons.length;
+        ammo = weapons[wIndex].max;
+        window.setWeapon(weapons[wIndex].name, ammo, weapons[wIndex].max);
+      } else {
+        window.setWeapon(weapons[wIndex].name, ammo, weapons[wIndex].max);
+      }
+    }, 450);
+
+    // simulate money changes
+    setInterval(() => {
+      const delta = Math.round((Math.random() - 0.4) * 800);
+      money = Math.max(0, money + delta);
+      window.setMoney(money);
+    }, 2000);
+  }
+
+})();
+</script>
+
+</body>
+</html>
